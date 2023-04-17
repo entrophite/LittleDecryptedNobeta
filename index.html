@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<style>
+		p {
+			width: 600px;
+		}
+
+		p.warning {
+			width: 600px;
+			color: red;
+			font-weight: bold;
+			font-size: larger;
+		}
+
+		code {
+			color: indigo;
+			background-color: #f0f0f0;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>LittleDecryptedNobeta</h1>
+	<p>This is a save file editor for LittleWitchNobeta. Click the
+		<code>Load</code> button to select, view, and edit an encrypted game
+		save data, including:
+	<ul>
+		<li><code>GameSave&#91;01-03&#93;.dat</code>: game saves</li>
+		<li><code>System.dat</code>: global and achievement data</li>
+	</ul>
+	Above save files can be found at location (PC version):<br>
+	<code>&lt;game root directory&gt;&#92;LittleWitchNobeta_Data&#92;Save&#92;</code><br>
+	The <code>&lt;game root directory&gt;</code> above is the directory containing the game executable
+	<code>LittleWitchNobeta.exe</code>.
+	</p>
+	<p>
+		The decrypted data will be in <a href="https://en.wikipedia.org/wiki/JSON">JSON</a> format,
+		and can be edited in the text box below or in any text editor of your preference.
+	</p>
+	<p class="warning">
+		Remember to backup your original file!
+	</p>
+	<p>
+		<textarea id="editor_box" name="editor_box" rows="20" cols="70"></textarea>
+		<button onclick="input.click()">Load</button>
+		<button onclick="onclick_save()">Save</button>
+	</p>
+	<hr>
+	<p>
+		<label for="aes_key_base64">Game encryption key (base64): </label><input id="aes_key_base64" type="text"
+			value="vckiTpRHOzjVf+5/+d9EIw==" size="32" readonly /><br>
+		<label for="aes_iv_base64">Game encryption IV (base64): </label><input id="aes_iv_base64" type="text"
+			value="zXKcTMyXoZAtt4f0XXsQ2Q==" size="32" readonly /><br>
+	</p>
+
+	<!--<script type="text/javascript" src="https://cdn.rawgit.com/ricmoo/aes-js/e27b99df/index.js"></script>-->
+	<script type="text/javascript" src="aes.js"></script>
+	<script>
+		// file input
+		var input = document.createElement('input');
+		input.type = 'file';
+		input.onchange = function () {
+			file = input.files[0];
+			console.log("load file: " + file.name);
+			reader.readAsBinaryString(file);
+		}
+
+		// file reader
+		var reader = new FileReader();
+		reader.onload = function (event) {
+			var t = int_list_to_bytes(decrypt_game_save(event.target.result));
+			document.getElementById("editor_box").value = t;
+		}
+
+		function bytes_to_int8array(b) {
+			var arr = new Uint8Array();
+			return Uint8Array.from(b, (v) => v.charCodeAt(0));
+		}
+
+		function int_list_to_bytes(l) {
+			return new TextDecoder().decode(l);
+		}
+
+		function get_aes_key_as_array() {
+			var b = window.atob(document.getElementById("aes_key_base64").value);
+			return bytes_to_int8array(b);
+		}
+
+		function get_aes_iv_as_array() {
+			var b = window.atob(document.getElementById("aes_iv_base64").value);
+			return bytes_to_int8array(b);
+		}
+
+		// decrypt
+		function decrypt_game_save(enc_bytes) {
+			// decrypt
+			var cipher = new aesjs.ModeOfOperation.cbc(
+				get_aes_key_as_array(),
+				get_aes_iv_as_array(),
+			);
+			var pad_bytes = cipher.decrypt(bytes_to_int8array(enc_bytes));
+			// remove padding
+			var len = pad_bytes.length;
+			var padv = pad_bytes[len - 1];
+			var dec_bytes = pad_bytes.slice(0, len - padv);
+			return dec_bytes;
+		}
+
+		// encrypt
+		function encrypt_game_save(dec_bytes) {
+			// padding
+			var len = dec_bytes.length;
+			var padv = 16 - len % 16;
+			var padding = new Uint8Array(padv).fill(padv, 0, padv);
+			var pad_bytes = new Uint8Array([...dec_bytes, ...padding]);
+			// encrypt
+			var cipher = new aesjs.ModeOfOperation.cbc(
+				get_aes_key_as_array(),
+				get_aes_iv_as_array(),
+			);
+			var enc_bytes = cipher.encrypt(pad_bytes);
+			return enc_bytes;
+		}
+
+		// save file
+		function onclick_save() {
+			// prepare data
+			//var dec_bytes = Uint8Array.from(document.getElementById("editor_box").value);
+			var dec_bytes = new TextEncoder().encode(document.getElementById("editor_box").value);
+			var enc_bytes = encrypt_game_save(dec_bytes);
+			var data = new Blob([enc_bytes]);
+			// download the file
+			var link = document.createElement("a");
+			// suggest the name the same as the loaded name
+			var sug_fname;
+			if (input.files.length) {
+				sug_fname = "EDIT_" + input.files[0].name;
+			} else {
+				sug_fname = "Unnamed.dat";
+			}
+			link.setAttribute("download", sug_fname);
+			link.href = window.URL.createObjectURL(data);
+			document.body.appendChild(link);
+
+			window.requestAnimationFrame(function () {
+				var event = new MouseEvent("click");
+				link.dispatchEvent(event);
+				document.body.removeChild(link);
+			})
+		}
+	</script>
+</body>
+
+</html>
